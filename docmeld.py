@@ -16,6 +16,10 @@ GIT_REPO_DIRECTORY = 'cloned'
 GIT_URL_START = 'git+'
 GIT_DEFAULT_BRANCH = 'master'
 
+SYSTEM_LIBCLANG = []
+LIBCLANG_PRIORITIZE_USER_CONFIG = True
+LIBCLANG_SEARCH_BY_LOCATE = True
+
 import os
 import os.path
 import sys
@@ -113,16 +117,6 @@ def load_cache(content, name):
     path = os.path.join(config.CACHE_DIRECTORY, key)
     return (path, False if DISABLE_CACHE else os.path.exists(path))
 
-# Python Markdown
-import markdown, re
-import markdown.extensions.codehilite
-from markdown import Extension
-from markdown.inlinepatterns import \
-    LinkPattern, ReferencePattern, AutolinkPattern, AutomailPattern, \
-    LINK_RE, REFERENCE_RE, SHORT_REF_RE, AUTOLINK_RE, AUTOMAIL_RE
-from markdown.inlinepatterns import SimpleTagPattern
-from markdown.postprocessors import Postprocessor
-
 # Basic Git manipulations
 def git_clone(url, dest):
     INFO('Cloning repository "%s"...' % url)
@@ -168,6 +162,16 @@ def handle_git_url(url, branch):
         exit(ERROR_CODE)
     os.chdir(cwd)
     return folder
+
+# Python Markdown
+import markdown, re
+import markdown.extensions.codehilite
+from markdown import Extension
+from markdown.inlinepatterns import \
+    LinkPattern, ReferencePattern, AutolinkPattern, AutomailPattern, \
+    LINK_RE, REFERENCE_RE, SHORT_REF_RE, AUTOLINK_RE, AUTOMAIL_RE
+from markdown.inlinepatterns import SimpleTagPattern
+from markdown.postprocessors import Postprocessor
 
 # LaTeX Extension
 # oh-my-acm.latex
@@ -240,6 +244,7 @@ def initialize_parsers():
     global md
     global clang
     global cl
+    global SYSTEM_LIBCLANG
 
     INFO('Loading Python Markdown...')
     for i in xrange(len(config.MARKDOWN_EXTENSIONS)):
@@ -251,9 +256,29 @@ def initialize_parsers():
 
     # Clang
     import clang.cindex
-    INFO('Loading libclang ["%s"]...' % config.LIBCLANG_PATH)
-    clang.cindex.Config.set_library_file(config.LIBCLANG_PATH)
-    cl = clang.cindex.Index.create()
+    if LIBCLANG_PRIORITIZE_USER_CONFIG:
+        SYSTEM_LIBCLANG = [config.LIBCLANG_PATH] + SYSTEM_LIBCLANG
+    else:
+        SYSTEM_LIBCLANG.append(config.LIBCLANG_PATH)
+    if LIBCLANG_SEARCH_BY_LOCATE:
+        result = subprocess.check_output(['locate', 'libclang.so']).strip()
+        SYSTEM_LIBCLANG += [x.strip() for x in result.split('\n')]
+    DEBUG(SYSTEM_LIBCLANG)
+    for path in SYSTEM_LIBCLANG:
+        if os.path.isfile(path):
+            DEBUG('Try loading libclang ("%s")...' % path)
+            try:
+                clang.cindex.Config.set_library_file(path)
+                cl = clang.cindex.Index.create()
+            except:
+                DEBUG('Failed to load "%s".' % path)
+                cl = None
+            else:
+                INFO('"%s" loaded.' % path)
+                break
+    if cl is None:
+        ERROR('Failed to load libclang.')
+        exit(16)
 
     INFO('Loading C++ Parser...')
     config.SPECIAL_MAP = {}
