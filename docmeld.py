@@ -29,6 +29,7 @@ import json
 import fnmatch
 import argparse
 import hashlib
+import shutil
 import importlib
 import subprocess
 
@@ -97,13 +98,13 @@ def md5(x):
 def checksum(signature, content):
     method, digest = signature.split('=', 1)
     if method not in hashlib.algorithms_available:
-        WARN('Failed to examine checksum "%s": unsopported hash algorithm.' % signature)
+        ERROR('Failed to examine checksum "%s": unsupported hash algorithm.' % signature)
         return False
     if type(content) is unicode:
         content = content.encode('utf-8')
     evaluated = hashlib.new(method, string=content).hexdigest()
     # DEBUG('evaluated = %s' % evaluated)
-    return digest == hashlib.new(method, string=content).hexdigest()
+    return digest == evaluated
 
 # Ignores
 def ignored(path):
@@ -151,7 +152,12 @@ def git_pull(branch):
     INFO('Pulling data of branch "%s" from remote...' % branch)
     return sh('git pull origin %s' % branch)
 
-def handle_git_url(url, branch):
+def git_get_head_sha1():
+    result = subprocess.check_output(['git', 'rev-parse', 'HEAD']).strip()
+    DEBUG('Current HEAD: %s' % result)
+    return result
+
+def handle_git_url(url, branch, head):
     ERROR_CODE = 8
     url = url[len(GIT_URL_START):]
     folder = os.path.join(GIT_REPO_DIRECTORY, md5(url))
@@ -173,6 +179,9 @@ def handle_git_url(url, branch):
     if not updated and git_pull(branch) != 0:
         ERROR('Unable to pull from remote on branch "%s".' % branch)
         exit(ERROR_CODE)
+    if head is not None and head not in git_get_head_sha1():
+        WARN('Unexpected HEAD commit.')
+        exit(0)
     os.chdir(cwd)
     return folder
 
@@ -541,6 +550,7 @@ def main():
     parser.add_argument('-o', '--output', help='location to place the generated HTML file.')
     parser.add_argument('-b', '--branch', help='specify the branch of the git repository.')
     parser.add_argument('-c', '--checksum-list', help='examine the checksums of specified files provided by a JSON file for security. JSON format: {"path_to_file": "sha256=...", ...}')
+    parser.add_argument('-s', '--head-sha1', help='examine the SHA1 hash code to current HEAD.')
     parser.add_argument('-n', '--no-cache', action='store_true', help='disable cache and force full re-generation.')
     parser.add_argument('-v', '--verbose', action='store_true', help='show more messages.')
     parser.add_argument('-q', '--quiet', action='store_true', help='show less messages.')
@@ -554,12 +564,15 @@ def main():
         DISABLE_DEBUG = True
     if args.verbose and args.quiet:
         WARN('Both "-q" and "-v" are enabled. Default to be quiet.')
+    output_path = None
+    if args.output:
+        output_path = os.path.abspath(args.output)
 
     # Handle URL (local/git)
     if args.LOCATION.startswith(GIT_URL_START):
         if args.branch is None:
             args.branch = GIT_DEFAULT_BRANCH
-        root_directory = handle_git_url(args.LOCATION, args.branch)
+        root_directory = handle_git_url(args.LOCATION, args.branch, head=args.head_sha1)
     else:
         if not os.path.isdir(args.LOCATION):
             ERROR('Failed to open directory "%s"' % args.LOCATION)
@@ -661,12 +674,13 @@ def main():
         body.append(config.UNUSED_DOCUMENT_TEMPLATE.format(
             title=path.decode(config.PATH_ENCODING), description=parse_markdown(path, dirname)))
 
-    if args.output:
-        if 'OUTPUT_PATH' in dir(config) and type(config.OUTPUT_PATH) is str:
-            WARN('"OUTPUT_PATH" has been specified in preferences, which will be ignored.')
-        config.OUTPUT_PATH = args.output
-    DEBUG('Writing into "%s"...' % config.OUTPUT_PATH)
-    with open(config.OUTPUT_PATH, 'w') as writer:
+    if output_path is None:
+        output_path = os.path.abspath(config.OUTPUT_PATH)
+    output_folder = os.path.dirname(output_path)
+    if not os.path.exists(output_folder):
+        os.makedirs(output_folder)
+    DEBUG('Writing into "%s"...' % output_path)
+    with open(output_path, 'w') as writer:
         data = config.WEBPAGE_TEMPLATE.format(
             document_title=config.DOCUMENT_TITLE,
             document=config.CONTENT_TEMPLATE.format(
@@ -675,6 +689,26 @@ def main():
                 document='\n'.join(body)
         ))
         writer.write(data.encode(config.ENCODING))
+
+    DEBUG('Copying assets into "%s"...' % (output_folder))
+    for name in config.ASSETS:
+        path = os.path.join(output_folder, name)
+        if os.path.exists(path) and os.path.samefile(name, path):
+            DEBUG('"%s" skipped.' % name)
+            continue
+        if os.path.isfile(name):
+            DEBUG('Copy file "%s"...' % name)
+            folder = os.path.dirname(path)
+            if not os.path.exists(folder):
+                os.makedirs(folder)
+            shutil.copyfile(name, path)
+        elif os.path.isdir(name):
+            DEBUG('Copy directory "%s"...' % name)
+            if os.path.isdir(path):
+                shutil.rmtree(path)
+            shutil.copytree(name, path)
+        else:
+            WARN('File or directory "%s" does not exist. Ignored.' % name)
 
 if __name__ == "__main__":
     main()

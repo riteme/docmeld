@@ -2,3 +2,6 @@
 __pycache__/*
 cloned/*
 .vscode/*
+.virtualenv/*
+database/*
+mimic_push.py
