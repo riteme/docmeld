@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-DEBUG_MODE = True
+DEBUG_MODE = False
 
 import os
 import sys

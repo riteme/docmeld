@@ -5,3 +5,7 @@ cloned/*
 .virtualenv/*
 database/*
 mimic_push.py
+uwsgi_main.py
+*.sock
+*.ini
+*.service

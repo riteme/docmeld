@@ -12,6 +12,7 @@ DISABLE_DEBUG = True
 
 PREFERENCE_MODULE = 'preferences'
 
+GIT_EXECUTABLE = '/usr/bin/git'
 GIT_REPO_DIRECTORY = 'cloned'
 GIT_URL_START = 'git+'
 GIT_DEFAULT_BRANCH = 'master'
@@ -134,26 +135,26 @@ def load_cache(content, name):
 # Basic Git manipulations
 def git_clone(url, dest):
     INFO('Cloning repository "%s"...' % url)
-    return sh('git clone %s %s' % (url, dest))
+    return sh('%s clone %s %s' % (GIT_EXECUTABLE, url, dest))
 
 def git_has_branch(branch):
-    result = subprocess.check_output(['git', 'branch', '-l', '-a']).strip().split('\n')
+    result = subprocess.check_output([GIT_EXECUTABLE, 'branch', '-l', '-a']).strip().split('\n')
     li = [x.rsplit('/', 1)[-1] for x in result]
     return branch in li
 
 def git_create_branch(branch):
-    return sh('git branch %s' % branch)
+    return sh('%s branch %s' % (GIT_EXECUTABLE, branch))
 
 def git_checkout(branch):
     INFO('Checking out branch "%s"...' % branch)
-    return sh('git checkout %s -q' % branch)
+    return sh('%s checkout %s -q' % (GIT_EXECUTABLE, branch))
 
 def git_pull(branch):
     INFO('Pulling data of branch "%s" from remote...' % branch)
-    return sh('git pull origin %s' % branch)
+    return sh('%s pull origin %s' % (GIT_EXECUTABLE, branch))
 
 def git_get_head_sha1():
-    result = subprocess.check_output(['git', 'rev-parse', 'HEAD']).strip()
+    result = subprocess.check_output([GIT_EXECUTABLE, 'rev-parse', 'HEAD']).strip()
     DEBUG('Current HEAD: %s' % result)
     return result
 
@@ -170,6 +171,7 @@ def handle_git_url(url, branch, head):
         updated = True
     cwd = os.getcwd()
     os.chdir(folder)
+    # DEBUG(os.path.abspath(folder))
     if not git_has_branch(branch):
         ERROR('No branch named "%s" found.')
         exit(ERROR_CODE)
