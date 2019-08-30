@@ -3,7 +3,7 @@
 
 from __future__ import print_function
 
-__VERSION__ = 'v0.1'
+__VERSION__ = 'v0.1.1'
 
 FILESIZE_LIMIT = 32 * 1024  # 32KB
 
@@ -17,6 +17,7 @@ GIT_URL_START = 'git+'
 GIT_DEFAULT_BRANCH = 'master'
 
 SYSTEM_LIBCLANG = []
+LIBCLANG_NO_USER_SPECIFIED = False
 LIBCLANG_PRIORITIZE_USER_CONFIG = True
 LIBCLANG_SEARCH_BY_LOCATE = True
 
@@ -24,6 +25,7 @@ import os
 import os.path
 import sys
 import re
+import json
 import fnmatch
 import argparse
 import hashlib
@@ -91,6 +93,17 @@ def md5(x):
     if type(x) is unicode:
         x = x.encode('utf-8')
     return hashlib.md5(x).hexdigest()
+
+def checksum(signature, content):
+    method, digest = signature.split('=', 1)
+    if method not in hashlib.algorithms_available:
+        WARN('Failed to examine checksum "%s": unsopported hash algorithm.' % signature)
+        return False
+    if type(content) is unicode:
+        content = content.encode('utf-8')
+    evaluated = hashlib.new(method, string=content).hexdigest()
+    # DEBUG('evaluated = %s' % evaluated)
+    return digest == hashlib.new(method, string=content).hexdigest()
 
 # Ignores
 def ignored(path):
@@ -256,10 +269,11 @@ def initialize_parsers():
 
     # Clang
     import clang.cindex
-    if LIBCLANG_PRIORITIZE_USER_CONFIG:
-        SYSTEM_LIBCLANG = [config.LIBCLANG_PATH] + SYSTEM_LIBCLANG
-    else:
-        SYSTEM_LIBCLANG.append(config.LIBCLANG_PATH)
+    if not LIBCLANG_NO_USER_SPECIFIED:
+        if LIBCLANG_PRIORITIZE_USER_CONFIG:
+            SYSTEM_LIBCLANG = [config.LIBCLANG_PATH] + SYSTEM_LIBCLANG
+        else:
+            SYSTEM_LIBCLANG.append(config.LIBCLANG_PATH)
     if LIBCLANG_SEARCH_BY_LOCATE:
         result = subprocess.check_output(['locate', 'libclang.so']).strip()
         SYSTEM_LIBCLANG += [x.strip() for x in result.split('\n')]
@@ -526,6 +540,7 @@ def main():
     parser.add_argument('LOCATION', help='path to the root directory of documents or URL to a git repository in "%s<URL>" format.' % GIT_URL_START)
     parser.add_argument('-o', '--output', help='location to place the generated HTML file.')
     parser.add_argument('-b', '--branch', help='specify the branch of the git repository.')
+    parser.add_argument('-c', '--checksum-list', help='examine the checksums of specified files provided by a JSON file for security. JSON format: {"path_to_file": "sha256=...", ...}')
     parser.add_argument('-n', '--no-cache', action='store_true', help='disable cache and force full re-generation.')
     parser.add_argument('-v', '--verbose', action='store_true', help='show more messages.')
     parser.add_argument('-q', '--quiet', action='store_true', help='show less messages.')
@@ -551,9 +566,32 @@ def main():
             exit(1)
         root_directory = args.LOCATION
 
-    # Load preferences
+    # Load checksum list (JSON format)
+    checksum_list = {}
+    if args.checksum_list is not None:
+        if not os.path.exists(args.checksum_list):
+            ERROR('Checksum list "%s" not found. Please ensure this file exists.' % args.checksum_list)
+            exit(233)
+        with open(args.checksum_list) as reader:
+            checksum_list = json.load(reader)
+
     root_directory = os.path.abspath(root_directory)
     os.chdir(root_directory)
+    # Examine checksums (especially for preferences.py)
+    try:
+        for path, sig in checksum_list.items():
+            if not os.path.isfile(path):
+                WARN('File "%s" does not exist. No checksum was examined for this file.' % path)
+            else:
+                with open(path, 'r') as reader:
+                    if not checksum(sig, reader.read()):
+                        ERROR('Decline to compile the project: file "%s" does not pass the checksum examination.' % path)
+                        exit(2333)
+    except Exception as e:
+        ERROR('An error occurred during checksum examination. [%s] %s' % (type(e), e))
+        exit(444)
+
+    # Load preferences
     sys.path.append(root_directory)
     try:
         config = importlib.import_module(PREFERENCE_MODULE)
