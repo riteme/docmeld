@@ -7,8 +7,8 @@ Restart=always
 RestartSec=300
 User=docmeld
 Group=www-data
-WorkingDirectory=/home/docmeld/docmeld
-ExecStart=/usr/local/bin/uwsgi --ini nginx/uwsgi.ini
+WorkingDirectory=/home/docmeld/docmeld/
+ExecStart=/usr/local/bin/uwsgi --ini /home/docmeld/docmeld/nginx/uwsgi.ini
 
 [Install]
 WantedBy=multi-user.target

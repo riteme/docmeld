@@ -69,6 +69,7 @@ def main():
 
     # Ping event
     if event == 'ping':
+        log.info('pong')
         return json.dumps({'msg': 'pong'})
 
     try:
