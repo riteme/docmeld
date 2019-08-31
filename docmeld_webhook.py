@@ -84,7 +84,7 @@ def main():
     idx = md5(clone_url)
     record_file_path = f'{DATABASE_DIRECTORY}/{idx}.json'
     if not os.path.isfile(record_file_path):
-        log.error(f'DECLINED: repository "{repo}" has no record on the server. Please contact the administrator.')
+        log.error(f'DECLINED: repository "{repo}" has no record on the server.')
         abort(UNAUTHORIZED)
 
     with open(record_file_path, 'r') as fp:
