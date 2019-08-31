@@ -286,8 +286,11 @@ def initialize_parsers():
         else:
             SYSTEM_LIBCLANG.append(config.LIBCLANG_PATH)
     if LIBCLANG_SEARCH_BY_LOCATE:
-        result = subprocess.check_output(['locate', 'libclang.so']).strip()
-        SYSTEM_LIBCLANG += [x.strip() for x in result.split('\n')]
+        try:
+            result = subprocess.check_output(['locate', 'libclang.so']).strip()
+            SYSTEM_LIBCLANG += [x.strip() for x in result.split('\n')]
+        except:
+            WARN('"locate" found no "libclang.so" file.')
     DEBUG(SYSTEM_LIBCLANG)
     for path in SYSTEM_LIBCLANG:
         if os.path.isfile(path):
