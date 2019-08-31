@@ -62,6 +62,15 @@ def main():
     if request.method != 'POST':
         abort(METHOD_NOT_ALLOWED)
 
+    event = request.headers.get('X-GitHub-Event')
+    if event is None:
+        log.error('DECLINED: no event provided.')
+        abort(BAD_REQUEST)
+
+    # Ping event
+    if event == 'ping':
+        return json.dumps({'msg': 'pong'})
+
     try:
         payload = request.get_json()
         if payload is None:
@@ -91,15 +100,6 @@ def main():
         if not authenticate(secret, signature, request.data):
             log.error('DECLINED: failed to pass authentication.')
             abort(UNAUTHORIZED)
-
-    event = request.headers.get('X-GitHub-Event')
-    if event is None:
-        log.error('DECLINED: no event provided.')
-        abort(BAD_REQUEST)
-
-    # Ping event
-    if event == 'ping':
-        return json.dumps({'msg': 'pong'})
 
     if event != 'push':
         return json.dumps({
