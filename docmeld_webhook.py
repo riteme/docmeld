@@ -62,6 +62,14 @@ def main():
     if request.method != 'POST':
         abort(METHOD_NOT_ALLOWED)
 
+    try:
+        payload = request.get_json()
+        if payload is None:
+            raise RuntimeError
+    except:
+        log.error('Failed to obtain payload data.')
+        abort(BAD_REQUEST)
+
     event = request.headers.get('X-GitHub-Event')
     if event is None:
         log.error('DECLINED: no event provided.')
@@ -71,14 +79,6 @@ def main():
     if event == 'ping':
         log.info('pong')
         return json.dumps({'msg': 'pong'})
-
-    try:
-        payload = request.get_json()
-        if payload is None:
-            raise RuntimeError
-    except:
-        log.error('Failed to obtain payload data.')
-        abort(BAD_REQUEST)
 
     repo = payload['repository']['full_name']
     clone_url = payload['repository']['clone_url']
