@@ -43,7 +43,7 @@ sudo apt install clang-6.0 python-clang-6.0 git
 * Nginx
 
 ## 生成器使用
-源代码和 Markdown 文档的设置和注意事项参见 [`riteme/oh-my-acm/fall19` 的 `README.md`](https://github.com/riteme/oh-my-acm/blob/fall19)。*配置文件 `preferences.py` 的说明文档待补充*。如果你想新建一个模板代码仓库，可以考虑使用 [`riteme/docmeld-example`](https://github.com/riteme/docmeld-example) 仓库模板（点击页面上 “Use this template” 新建仓库）。
+源代码和 Markdown 文档的设置和注意事项参见 [`riteme/oh-my-acm/fall19` 的 `README.md`](https://github.com/riteme/oh-my-acm/tree/fall19)。*配置文件 `preferences.py` 的说明文档待补充*。如果你想新建一个模板代码仓库，可以考虑使用 [`riteme/docmeld-example`](https://github.com/riteme/docmeld-example) 仓库模板（点击页面上 “Use this template” 新建仓库）。
 
 编译本地仓库：
 
