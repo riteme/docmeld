@@ -69,13 +69,17 @@ sudo apt install clang-6.0 python-clang-6.0 git
 
 ```json
 {
-    "secret": "...",  // 仓库的 secret
-    "last_build": "",  // 记录了上次该仓库编译时的 commit 的 SHA1 值，初始为空字符串，无需改动
-    "checksums": {  // 文件校验码列表，出现在列表中的文件均会先进行校验后再开始编译
+    "secret": "...",
+    "last_build": "",
+    "checksums": {
         "preferences.py": "sha256=94fa456bd4834e676b78b8b118091f97f3ed60c18a54ed1d2eb5a2c4f78a9374"
     }
 }
 ```
+
+* `secret`: 仓库的 `secret`。
+* `last_build`：记录了上次该仓库编译时的 commit 的 SHA1 值，初始为空字符串，无需改动。
+* `checksums`：文件校验码列表，出现在列表中的文件均会先进行校验后再开始编译。
 
 ## TODO
 * [ ] 模块化
