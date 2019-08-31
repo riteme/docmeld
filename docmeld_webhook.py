@@ -11,6 +11,7 @@ import hashlib
 import tempfile
 import subprocess
 
+from datetime import datetime
 from filelock import FileLock
 from flask import Flask, request, abort
 
@@ -27,8 +28,10 @@ DOCMELD_EXECUTABLE = './docmeld.py'
 DATABASE_DIRECTORY = 'database'
 WEBPAGE_DIRECTORY = '/var/www/html/docmeld'
 WEBURL = 'https://riteme.site/docmeld/'
+ROUTE = 'docmeld-webhook'
 STATUS_FILE = 'status.txt'
 INDEX_FILE = 'index.html'
+TEMPORARY_INDEX_FILE = './nginx/temporary_index.html'
 OUTPUT_FILE = 'output.html'
 GIT_URL_START = 'git+'
 COMPILE_TIME_LIMIT = 300  # 5min
@@ -45,12 +48,16 @@ def md5(x):
 def authenticate(secret, signature, data):
     method, digest = signature.split('=', 1)
     if method not in hashlib.algorithms_available:
-        log.error('Unsupported hash method: "%s"', method)
+        log.error(f'Unsupported hash method: "{method}"')
         return False
     mac = hmac.new(secret, msg=data, digestmod=method)
     return hmac.compare_digest(mac.hexdigest(), digest)
 
-@application.route('/docmeld-webhook/', methods=['GET', 'POST'])
+def get_utc_offset():
+    offset = datetime.now().hour - datetime.utcnow().hour
+    return f'+{offset}' if offset >= 0 else str(offset)
+
+@application.route(f'/{ROUTE}/', methods=['GET', 'POST'])
 def main():
     if request.method != 'POST':
         abort(METHOD_NOT_ALLOWED)
@@ -66,14 +73,14 @@ def main():
     repo = payload['repository']['full_name']
     clone_url = payload['repository']['clone_url']
     idx = md5(clone_url)
-    record_file_path = '%s/%s.json' % (DATABASE_DIRECTORY, idx)
+    record_file_path = f'{DATABASE_DIRECTORY}/{idx}.json'
     if not os.path.isfile(record_file_path):
-        log.error('DECLINED: repository "%s" has no record on the server. Please contact the administrator.', repo)
+        log.error(f'DECLINED: repository "{repo}" has no record on the server. Please contact the administrator.')
         abort(UNAUTHORIZED)
 
     with open(record_file_path, 'r') as fp:
         record = json.load(fp)
-        log.info('Record file "%s" loaded.', record_file_path)
+        log.info(f'Record file "{record_file_path}" loaded.')
 
     if not DEBUG_MODE:
         secret = record['secret']
@@ -94,14 +101,26 @@ def main():
     if event == 'ping':
         return json.dumps({'msg': 'pong'})
 
-    if event not in ['push']:
+    if event != 'push':
         return json.dumps({
             'status': 'fail',
             'reason': 'not a push event'
         })
 
+    commits = payload['commits']
+    if not commits:
+        log.info('No new commits.')
+        return json.dumps({
+            'status': 'success'
+        })
+
     branch = payload['ref'].rsplit('/', 1)[-1]
     head = payload['after']
+    for x in commits:
+        if x['sha'] == head:
+            commit = x
+            break
+
     folder_name = '%s/%s' % (repo, branch)
     folder = os.path.join(WEBPAGE_DIRECTORY, folder_name)
     if not os.path.exists(folder):
@@ -109,9 +128,14 @@ def main():
     status = os.path.join(folder, STATUS_FILE)
     index = os.path.join(folder, INDEX_FILE)
     output = os.path.join(folder, OUTPUT_FILE)
+    status_url = WEBURL + os.path.join(folder_name, STATUS_FILE)
+    index_url = WEBURL + os.path.join(folder_name, INDEX_FILE)
 
     index_lock = index + '.lock'
     with FileLock(index_lock):
+        log.info(f'Copying {TEMPORARY_INDEX_FILE} to {index}')
+        shutil.copyfile(TEMPORARY_INDEX_FILE, index)
+
         tmpfd, tmppath = tempfile.mkstemp()
         log.debug('tmppath = %s', tmppath)
         with os.fdopen(tmpfd, 'w') as fp:
@@ -119,39 +143,48 @@ def main():
 
         log.info('Launching docmeld...')
         with open(status, 'w') as fp:
+            fp.write(f'Current server time: {str(datetime.now())} (UTC{get_utc_offset()})\n')
+            fp.write(f'Build for commit #{head}: {commit["message"]}\n')
+        with open(status, 'a') as fp:
             proc = subprocess.Popen(
                 [DOCMELD_EXECUTABLE, GIT_URL_START + clone_url,
-                 '-b', branch, '-s', head, '-c', tmppath, '-o', output],
+                 '-b', branch, '-s', head, '-c', tmppath, '-o', output,
+                 '-v' if DEBUG_MODE else '-q'],
                 stdout=fp, stderr=subprocess.STDOUT)
+
             try:
                 proc.wait(timeout=COMPILE_TIME_LIMIT)
-            except:
+            except subprocess.TimeoutExpried as e:
                 log.error('Time limit exceeded.')
                 return json.dumps({
                     'status': 'fail',
-                    'reason': 'time limit exceeded (%ss)' % COMPILE_TIME_LIMIT,
-                    'detail': WEBURL + os.path.join(folder_name, STATUS_FILE)
+                    'reason': f'time limit exceeded ({e.timeout}s)',
+                    'detail': status_url
                 })
 
         if proc.returncode != 0:
-            log.error('docmeld execution failed with status code %s', proc.returncode)
+            log.error(f'docmeld execution failed with status code {proc.returncode}', )
             return json.dumps({
                 'status': 'fail',
-                'reason': 'docmeld failed with status code %s' % proc.returncode,
-                'detail': WEBURL + os.path.join(folder_name, STATUS_FILE)
+                'reason': f'docmeld failed with status code {proc.returncode}',
+                'returncode': proc.returncode,
+                'detail': status_url
             })
 
-        log.info('Copying index.html to output.html...')
+        log.info(f'Copying {output} to {index}...')
         shutil.copyfile(output, index)
 
     os.remove(tmppath)
-    result = {
+    record['last_build'] = head
+    with open(record_file_path, 'w') as fp:
+        json.dump(record, fp, sort_keys=True, indent=4)
+
+    return json.dumps({
         'status': 'success',
         'returncode': proc.returncode,
-        'output_url': WEBURL + os.path.join(folder_name, INDEX_FILE),
-        'detail': WEBURL + os.path.join(folder_name, STATUS_FILE)
-    }
-    return json.dumps(result, sort_keys=True)
+        'output_url': index_url,
+        'detail': status_url
+    })
 
 if __name__ == '__main__':
     application.run(host='0.0.0.0', debug=DEBUG_MODE)

@@ -1,0 +1,12 @@
+[Unit]
+Description=Docmeld GitHub webhook service
+After=network.target
+
+[Service]
+User=riteme
+Group=www-data
+WorkingDirectory=/home/riteme/Code/docmeld
+ExecStart=/usr/local/bin/uwsgi --ini nginx/uwsgi.ini
+
+[Install]
+WantedBy=multi-user.target

@@ -1,11 +1,12 @@
 *.pyc
 __pycache__/*
 cloned/*
+!cloned/.gitkeeper
 .vscode/*
 .virtualenv/*
 database/*
+!database/.gitkeeper
 mimic_push.py
-uwsgi_main.py
-*.sock
-*.ini
-*.service
+/*.sock
+/*.ini
+/*.service
