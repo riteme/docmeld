@@ -115,12 +115,8 @@ def main():
         })
 
     branch = payload['ref'].rsplit('/', 1)[-1]
-    head = payload['after']
-    for x in commits:
-        if x['sha'] == head:
-            commit = x
-            break
-
+    commit = payload['head_commit']
+    head = commit['id']
     folder_name = '%s/%s' % (repo, branch)
     folder = os.path.join(WEBPAGE_DIRECTORY, folder_name)
     if not os.path.exists(folder):
