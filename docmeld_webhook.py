@@ -50,7 +50,7 @@ def authenticate(secret, signature, data):
     if method not in hashlib.algorithms_available:
         log.error(f'Unsupported hash method: "{method}"')
         return False
-    mac = hmac.new(secret, msg=data, digestmod=method)
+    mac = hmac.new(secret.encode(ENCODING), msg=data, digestmod=method)
     return hmac.compare_digest(mac.hexdigest(), digest)
 
 def get_utc_offset():
