@@ -137,6 +137,10 @@ def git_clone(url, dest):
     INFO('Cloning repository "%s"...' % url)
     return sh('%s clone %s %s' % (GIT_EXECUTABLE, url, dest))
 
+def git_fetch():
+	INFO('Fetching...')
+	return sh('%s fetch' % GIT_EXECUTABLE)
+
 def git_has_branch(branch):
     result = subprocess.check_output([GIT_EXECUTABLE, 'branch', '-l', '-a']).strip().split('\n')
     li = [x.rsplit('/', 1)[-1] for x in result]
@@ -172,14 +176,14 @@ def handle_git_url(url, branch, head):
     cwd = os.getcwd()
     os.chdir(folder)
     # DEBUG(os.path.abspath(folder))
+    if not updated and git_pull(branch) != 0:
+        ERROR('Unable to pull from remote on branch "%s".' % branch)
+        exit(ERROR_CODE)
     if not git_has_branch(branch):
-        ERROR('No branch named "%s" found.')
+        ERROR('No branch named "%s" found.' % branch)
         exit(ERROR_CODE)
     if git_checkout(branch) != 0:
         ERROR('Unable to checkout the branch "%s".' % branch)
-        exit(ERROR_CODE)
-    if not updated and git_pull(branch) != 0:
-        ERROR('Unable to pull from remote on branch "%s".' % branch)
         exit(ERROR_CODE)
     if head is not None and head not in git_get_head_sha1():
         WARN('Unexpected HEAD commit.')
